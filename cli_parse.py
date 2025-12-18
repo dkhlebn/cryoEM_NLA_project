@@ -1,0 +1,44 @@
+import argparse
+
+def parse_cli():
+    p = argparse.ArgumentParser(description="Create cryoSPARC pipeline from EMPIAR TSV")
+    p.add_argument("--project", required=True, help="CryoSPARC project ID (e.g., P4)")
+    p.add_argument("--workspace", default=None, help="CryoSPARC workspace ID (e.g., W1)")
+    p.add_argument("--tsv", required=True, help="Path to TSV file")
+    p.add_argument("--dataset_dir", required=True, help="Directory name in CWD with MRC data in it")
+    p.add_argument("--hostname", required=True,
+                   help="Hostname where ports for CryoSPARC are opened")
+
+    mrc_group = p.add_mutually_exclusive_group()
+    mrc_group.add_argument("--mrc_ttsvd_job", action="store_true",
+                           help="Apply TT-SVD denoising to MRCs")
+    mrc_group.add_argument("--mrc_tucker_job",action="store_true",
+                           help="Apply Tucker denoising to MRCs")
+    p.add_argument("--mrc_ranks", default=None, help="Ranks for MRC decomposition.")
+
+    cls_group = p.add_mutually_exclusive_group()
+    cls_group.add_argument("--cls_ttsvd_job", action="store_true",
+                           help="Apply TT-SVD denoising to 2D class stacks")
+    cls_group.add_argument("--cls_tucker_job",action="store_true",
+                           help="Apply Tucker denoising to 2D class stacks")
+    p.add_argument("--cls_ranks", default=None, help="Ranks for CLS decomposition.")
+
+    args = p.parse_args()
+    return args
+
+
+def get_decomposition(args, stage):
+    if stage == "mrc":
+        rks = int(args.mrc_ranks) if args.mrc_ranks else None
+        if args.mrc_ttsvd_job:
+            return "tt", rks
+        if args.mrc_tucker_job:
+            return "tucker", rks
+
+    if stage == "cls":
+        rks = int(args.cls_ranks) if args.cls_ranks else None
+        if args.cls_ttsvd_job:
+            return "tt", rks
+        if args.cls_tucker_job:
+            return "tucker", rks
+    return None, None
