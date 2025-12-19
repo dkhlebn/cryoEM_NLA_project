@@ -8,7 +8,8 @@ def parse_cli():
     p.add_argument("--dataset_dir", required=True, help="Directory name in CWD with MRC data in it")
     p.add_argument("--hostname", required=True,
                    help="Hostname where ports for CryoSPARC are opened")
-
+    p.add_argument("--out_dir", default="./pipeline_out",
+                   help="Output directory where json will be stored")
     mrc_group = p.add_mutually_exclusive_group()
     mrc_group.add_argument("--mrc_ttsvd_job", action="store_true",
                            help="Apply TT-SVD denoising to MRCs")
@@ -42,3 +43,20 @@ def get_decomposition(args, stage):
         if args.cls_tucker_job:
             return "tucker", rks
     return None, None
+
+
+def get_out_fname(args):
+    fname = f"{args.outdir}/{args.dataset_dir}"
+    if args.mrc_ranks is not None:
+        mode = "Tucker" if args.mrc_tucker_job else "TTSVD"
+        fname += f"_mrc{mode}{args.mrc_ranks}"
+    else:
+        fname += "_mrcNone"
+
+    if args.cls_ranks is not None:
+        mode = "Tucker" if args.cls_tucker_job else "TTSVD"
+        fname += f"_cls{mode}{args.cls_ranks}"
+    else:
+        fname += "_clsNone"
+
+    return fname

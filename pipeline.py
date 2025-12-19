@@ -1,12 +1,14 @@
 import os
 import pandas as pd
 from cryosparc.tools import CryoSPARC
-from cli_parse import parse_cli, get_decomposition
+from cli_parse import parse_cli, get_decomposition, get_out_fname
 from cs_wrappers import (run_import_files, run_motion_correction,
                          run_mrc_TTSVD, run_ctf_est, run_ppicking,
                          run_pextract, run_2DClass, run_2Dmanual,
                          run_stack_TTSVD, run_abinitio,
-                         run_homoref, run_lrdist_estim)
+                         run_homoref, run_lrdist_estim,
+                         run_sharp)
+from metrics import compute_all_metrics
 from utils import delete_job
 
 MOVIES_JOB_TYPE = "import_movies"
@@ -38,6 +40,7 @@ def main():
 
     # main loop
     jobs = []
+    metrics_uids = {}
     if df["EMPIAR_ID"] == "EMPIAR-10017":
         mtcorr_uid = run_import_files(df, "micrographs", ws=workspace)
         jobs.append(mtcorr_uid)
@@ -53,7 +56,7 @@ def main():
     ctf_est_uid = run_ctf_est(mtcorr_uid, project, workspace)
     bpick_uid = run_ppicking(df, ctf_est_uid, workspace)
     pextr_uid = run_pextract(df, bpick_uid, workspace)
-    class2d_uid = run_2DClass(df, pextr_uid, workspace)
+    class2d_uid = run_2DClass(pextr_uid, workspace)
     select_2D_uid = run_2Dmanual(class2d_uid, workspace)
     jobs.extend([ctf_est_uid, bpick_uid, pextr_uid,
                  class2d_uid, select_2D_uid])
@@ -61,14 +64,25 @@ def main():
         select_2D_uid = run_stack_TTSVD(project, select_2D_uid, workspace,
                                         decomp=cls_decomp, ranks=cls_ranks)
         jobs.append(select_2D_uid)
+    metrics_uids["select2d"] = select_2D_uid
+
     abin_uid = run_abinitio(select_2D_uid, project, workspace)
     href_uid = run_homoref(abin_uid, workspace)
-    locres_uid = run_lrdist_estim(href_uid, workspace)
-    jobs.extend([abin_uid, href_uid, locres_uid])
+    metrics_uids["href_uid"] = href_uid
 
-     #delete jobs
-    for j in reversed(jobs):
-        delete_job(j, project.uid)
+    out_fname = get_out_fname(args)
+    locres_uid = run_lrdist_estim(href_uid, workspace, project, out_fname)
+    metrics_uids["local_resolution"] = locres_uid
+    sharpen_uid = run_sharp(href_uid, locres_uid, workspace, project, out_fname)
+    metrics_uids["sharpen"] = sharpen_uid
+    jobs.extend([abin_uid, href_uid, locres_uid, sharpen_uid])
+
+    # metrics
+    compute_all_metrics(project, metrics_uids, out_fname)
+
+    # delete jobs
+#    for j in reversed(jobs):
+#        delete_job(j, project.uid)
 
 if __name__ == "__main__":
     main()

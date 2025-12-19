@@ -124,3 +124,26 @@ def _paste_patch(img, patch, cx, cy, box, idx=None):
     py1 = py0 + (iy1 - iy0)
 
     target[iy0:iy1, ix0:ix1] = patch[py0:py1, px0:px1]
+
+
+def cryosparc_whiten(stack, eps=1e-6):
+    N = stack.shape[0]
+    out = np.empty_like(stack)
+
+    for i in range(N):
+        img = stack[i]
+        img = img - img.mean()
+        std = img.std()
+        if std < eps:
+            out[i] = 0.0
+        else:
+            out[i] = img / std
+    return out
+
+
+def clip_outliers(stack, sigma=5.0):
+    mu = stack.mean()
+    std = stack.std()
+    lo = mu - sigma * std
+    hi = mu + sigma * std
+    return np.clip(stack, lo, hi)

@@ -1,4 +1,5 @@
 import os
+import shutil
 import mrcfile
 import numpy as np
 from cryosparc.dataset import Dataset
@@ -314,7 +315,7 @@ def run_homoref(job_uid, ws):
     return href_job.uid
 
 
-def run_lrdist_estim(job_uid, ws):
+def run_lrdist_estim(job_uid, ws, pj, fname):
     lrdist_job = ws.create_job(
         "local_resolution",
         params={},
@@ -322,4 +323,28 @@ def run_lrdist_estim(job_uid, ws):
     )
     lrdist_job.queue(lane="default")
     lrdist_job.wait_for_done()
+
+    map_path = lrdist_job.load_output("volume")["map_locres/path"][0]
+    src = pj.dir() / map_path
+    dst = f"{fname}.locres.mrc"
+    shutil.copy(src, dst)
+
     return lrdist_job.uid
+
+
+def run_sharp(href_uid, lres_uid, ws, pj, fname):
+    sharpen_job = ws.create_job(
+        "sharpen",
+        params={},
+        connections={"volume": (lres_uid, "volume"),
+                     "mask":   (href_uid, "mask")}
+    )
+    sharpen_job.queue(lane="default")
+    sharpen_job.wait_for_done()
+
+    map_path = sharpen_job.load_output("volume")["map_sharp/path"][0]
+    src = pj.dir() / map_path
+    dst = f"{fname}.sharpmap.mrc"
+    shutil.copy(src, dst)
+
+    return sharpen_job.uid

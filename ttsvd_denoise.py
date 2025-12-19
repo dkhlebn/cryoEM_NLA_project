@@ -3,6 +3,7 @@ import numpy as np
 import mrcfile
 import tntorch as tn
 import torch
+from utils import cryosparc_whiten, clip_outliers
 
 
 def load_mrc(path):
@@ -120,45 +121,43 @@ def process_file(path, outdir, patch, stride, ranks, eps, device, decomposition=
 
 
 def process_stack(stack,
-                  patch=64,
-                  stride=32,
                   ranks=None,
                   eps=None,
                   device='cpu', decomposition="tt"):
-    _, H, W = stack.shape
-    ph = pw = patch
+    N, H, W = stack.shape
+    stack = stack.astype(np.float32)
 
-    out_stack = np.zeros_like(stack, dtype=np.float32)
-    weight_stack = np.zeros_like(stack, dtype=np.float32)
+    norms = np.linalg.norm(stack.reshape(N, -1), axis=1)
+    norms[norms == 0] = 1.0
+    stack_norm = stack / norms[:, None, None]
 
-    ys, xs = patch_grid(H, W, patch, stride)
-    win2d = hann2d(ph, pw).astype(np.float32)
+    mean = stack_norm.mean(axis=0, keepdims=True)
+    residuals = stack_norm - mean
 
-    for y in ys:
-        for x in xs:
-            ph_cur = min(ph, H - y)
-            pw_cur = min(pw, W - x)
+    rN = min(max(8, N // 5), N)
+    rH = min(32, H)
+    rW = min(32, W)
 
-            patch3d = stack[:, y:y+ph_cur, x:x+pw_cur].astype(np.float32)
+    if decomposition == "tt":
+        ranks = (1, rN, rH, 1)
+    elif decomposition == "tucker":
+        ranks = (rN, rH, rW)
 
-            pad_h = ph - ph_cur
-            pad_w = pw - pw_cur
-            if pad_h or pad_w:
-                patch3d = np.pad(
-                    patch3d,
-                    ((0, 0), (0, pad_h), (0, pad_w)),
-                    mode="reflect"
-                )
-
-            rec3d = decompose_tensor(patch3d, decomposition=decomposition,
-                                     ranks=ranks, eps=eps, device=device)
-            rec3d = rec3d[:, :ph_cur, :pw_cur]
-            win = win2d[:ph_cur, :pw_cur]
-
-            out_stack[:, y:y+ph_cur, x:x+pw_cur] += rec3d * win[None, :, :]
-            weight_stack[:, y:y+ph_cur, x:x+pw_cur] += win[None, :, :]
-
-    weight_stack[weight_stack < 1e-8] = 1.0
-    denoised_stack = out_stack / weight_stack
-
-    return denoised_stack
+    rec_residuals = decompose_tensor(
+        residuals,
+        decomposition=decomposition,
+        ranks=ranks,
+        eps=eps,
+        device=device,
+    )
+    denoised = (rec_residuals + mean) * norms[:, None, None]
+    denoised = clip_outliers(
+                   cryosparc_whiten(
+                       np.nan_to_num(
+                           denoised, nan=0.0,
+                           posinf=0.0, neginf=0.0
+                       )
+                   ),
+                   sigma=5.0
+               )
+    return denoised.astype(np.float32)
