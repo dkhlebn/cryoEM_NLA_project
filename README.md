@@ -5,6 +5,14 @@ This directory contains a **CryoSPARC-integrated pipeline** for benchmarking
 The pipeline is designed to run **programmatically via the CryoSPARC Python API**
 and to clean up intermediate jobs automatically.
 
+This project implements a CryoSPARC-based cryo-EM processing pipeline with
+optional tensor-based denoising (TT-SVD / Tucker) and automatic extraction of
+reconstruction quality metrics.
+
+In addition to reconstruction, the pipeline produces standardized numerical
+metrics and exported maps, enabling systematic comparison of denoising
+strategies and parameter choices.
+
 ---
 
 ## Overview
@@ -24,6 +32,35 @@ The workflow is:
 
 The main orchestration logic lives in `pipeline.py`.
 
+### Reconstruction Quality Metrics
+
+After homogeneous refinement, the pipeline automatically computes and exports
+a set of reconstruction quality metrics derived directly from CryoSPARC jobs.
+
+The following metrics are collected and saved into a single JSON file:
+#### Global metrics
+- **FSC 0.143** (gold-standard resolution)
+- **B-factor** (from sharpening)
+
+#### Local resolution
+- Minimum
+- 25th percentile
+- Median
+- 75th percentile
+- Maximum
+
+#### Particle & class retention
+- Fraction of retained particles after 2D selection
+- Fraction of retained 2D classes
+
+#### 2D class statistics
+- Class occupancy (min / quartiles / max)
+- Mean and median voxel-wise variance within classes
+
+#### Angular distribution
+- Angular entropy
+- Normalized angular entropy (orientation isotropy)
+
 ---
 
 ## Structure
@@ -39,6 +76,20 @@ The main orchestration logic lives in `pipeline.py`.
 ├── run_benchmarks.sh # Script to benchmark pipeline on datasets
 └── README.md
 ```
+
+## Outputs
+
+For each run, the pipeline produces:
+
+- `<name>.json` – aggregated reconstruction metrics
+- `<name>.locres.mrc` – local resolution map
+- `<name>.sharpmap.mrc` – sharpened final map
+
+Output filenames are generated automatically based on:
+- Dataset name
+- Denoising method (TT-SVD or Tucker)
+- Applied tensor ranks
+
 
 ---
 
@@ -99,7 +150,18 @@ Denoising can be applied to:
 - Individual **micrographs** (via `process_file`);
 - Full **particle stacks** or **2D-class stacks** (via `process_stack`);
 
-Tensor ranks are controlled via function arguments or CLI parameters.
+### Denoising strategy
+
+The tensor denoising implementation was updated from a patch-based approach
+to a global residual decomposition strategy:
+
+1. Per-particle energy normalization
+2. Mean volume subtraction
+3. Tensor decomposition of residuals (TT-SVD or Tucker)
+4. Reconstruction of denoised residuals
+5. CryoSPARC-style whitening and robust outlier clipping
+
+Tensor ranks are chosen adaptively based on stack dimensions.
 
 ### Key Functions
 
@@ -158,6 +220,9 @@ CryoSPARC projects/workspaces, and tensor decomposition options.
 **Class Stack (CLS) Decomposition**
 - `--cls_ttsvd_job` / `--cls_tucker_job`: Mutually exclusive flags to choose decomposition method for 2D class stacks;
 - `--cls_ranks`: Optional tensor ranks for CLS decomposition;
+
+**Output directory**
+- `--out_dir`:Output directory where maps and metric JSON files are written (default: `./pipeline_out`).
 
 ### Helper Functions
 
@@ -257,6 +322,18 @@ Notes:
 - Assumes CryoSPARC project/workspace are already configured
 - Removes previous working directories before running
 - Intended for controlled benchmarking, not production use
+
+---
+
+## Metrics implementation
+
+Metric extraction is implemented in `metrics.py` and relies on:
+
+- CryoSPARC job BSON event logs
+- CryoSPARC internal job statistics
+- Direct access to particle orientations and class stacks
+
+No external post-processing tools are required.
 
 ---
 
