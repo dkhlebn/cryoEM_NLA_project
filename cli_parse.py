@@ -46,7 +46,7 @@ def get_decomposition(args, stage):
 
 
 def get_out_fname(args):
-    fname = f"{args.outdir}/{args.dataset_dir}"
+    fname = f"{args.out_dir}/{args.dataset_dir}"
     if args.mrc_ranks is not None:
         mode = "Tucker" if args.mrc_tucker_job else "TTSVD"
         fname += f"_mrc{mode}{args.mrc_ranks}"
