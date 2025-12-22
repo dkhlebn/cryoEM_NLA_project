@@ -101,6 +101,7 @@ Output filenames are generated automatically based on:
 - [mrcfile](https://mrcfile.readthedocs.io/)
 - [tntorch](https://tntorch.readthedocs.io/)
 - [torch](https://pytorch.org/)
+- [bson](https://pypi.org/project/bson/)
 - [CryoSPARC API and tools](https://guide.cryosparc.com/setup/cryosparc-setup) – for creating and managing CryoSPARC jobs in Python.
 
 
